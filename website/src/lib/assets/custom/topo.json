@@ -878,14 +878,14 @@
       ],
       "layout": {"line-cap": "round", "line-join": "round"},
       "paint": {
-        "line-color": "#cfcdca",
+        "line-color": ["match", ["get", "class"], ["service"], "#cfcdca", "hsl(47,61%,51%,70%)"],
         "line-width": [
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          15,
+          12,
           1,
-          16,
+          15,
           4,
           20,
           11
@@ -1196,9 +1196,9 @@
           "interpolate",
           ["exponential", 1.2],
           ["zoom"],
-          15.5,
-          0,
-          16,
+          12,
+          0.5,
+          15,
           2,
           20,
           7.5
