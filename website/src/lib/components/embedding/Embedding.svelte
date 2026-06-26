@@ -5,7 +5,6 @@
     import GPXStatistics from '$lib/components/GPXStatistics.svelte';
     import Map from '$lib/components/map/Map.svelte';
     import LayerControl from '$lib/components/map/layer-control/LayerControl.svelte';
-    import OpenIn from '$lib/components/embedding/OpenIn.svelte';
     import { writable } from 'svelte/store';
     import type { GPXFile } from 'gpx';
     import {
@@ -108,7 +107,6 @@
             geolocate={true}
             hash={useHash}
         />
-        <OpenIn files={options.files} ids={options.ids} />
         <LayerControl />
         <GPXLayers />
         {#if $fileStateCollection.size > 1}
