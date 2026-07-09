@@ -936,7 +936,7 @@ export const overpassTree: LayerTreeType = {
 };
 
 // Default basemap used
-export const defaultBasemap = 'libertyTopo';
+export const defaultBasemap = 'openTopoMap';
 
 // Default overlays used (none)
 export const defaultOverlays: LayerTreeType = {

@@ -100,8 +100,8 @@ export function getClosestTrackSegments(
 
 export function getElevation(
     points: (TrackPoint | Waypoint | Coordinates)[],
-    ELEVATION_ZOOM: number = 12,
-    tileSize = 512
+    ELEVATION_ZOOM: number = 14,
+    tileSize = 256
 ): Promise<number[]> {
     let coordinates = points.map((point) =>
         point instanceof TrackPoint || point instanceof Waypoint ? point.getCoordinates() : point
@@ -121,7 +121,7 @@ export function getElevation(
     };
 
     let promises = uniqueTiles.map((tile) =>
-        fetch(`https://tiles.gpx.studio/mapterhorn/${ELEVATION_ZOOM}/${tile[0]}/${tile[1]}.webp`, {
+        fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${ELEVATION_ZOOM}/${tile[0]}/${tile[1]}.png`, {
             cache: 'force-cache',
         })
             .then((response) => response.blob())
