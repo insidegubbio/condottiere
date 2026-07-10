@@ -30,6 +30,31 @@ import { mapCursor, MapCursorState } from '$lib/logic/map-cursor';
 import { ANCHOR_LAYER_KEY } from '$lib/components/map/style';
 import { gpxColors } from '$lib/components/map/gpx-layer/gpx-layers';
 
+export type MarkerStyle = 'pin' | 'circle' | 'custom';
+
+const MARKER_TYPE_PREFIX = 'condottiero:';
+
+export const CUSTOM_ICON_LINK_TYPE = 'condottiero:customIcon';
+
+export function getMarkerStyle(wptType: string | undefined): MarkerStyle {
+    if (wptType === `${MARKER_TYPE_PREFIX}circle`) return 'circle';
+    if (wptType === `${MARKER_TYPE_PREFIX}custom`) return 'custom';
+    return 'pin';
+}
+
+export function encodeMarkerStyle(style: MarkerStyle): string | undefined {
+    if (style === 'pin') return undefined;
+    return `${MARKER_TYPE_PREFIX}${style}`;
+}
+
+export function getCustomIconFromLinks(
+    link: { attributes: { href: string }; type?: string } | undefined
+): string | undefined {
+    if (!link) return undefined;
+    if (link.type === CUSTOM_ICON_LINK_TYPE) return link.attributes.href;
+    return undefined;
+}
+
 const colors = [
     '#ff0000',
     '#0000ff',
@@ -81,7 +106,45 @@ function removeColor(fileId: string, color: string) {
     });
 }
 
-export function getSvgForSymbol(symbol?: string | undefined, layerColor?: string | undefined) {
+export function getSvgForSymbol(
+    symbol?: string | undefined,
+    layerColor?: string | undefined,
+    markerStyle: MarkerStyle = 'pin',
+    customIconDataUri?: string | undefined
+): string {
+    if (markerStyle === 'custom' && customIconDataUri) {
+        if (customIconDataUri.startsWith('data:image/svg+xml')) {
+            try {
+                const raw = customIconDataUri.startsWith('data:image/svg+xml;base64,')
+                    ? atob(customIconDataUri.split(',')[1])
+                    : decodeURIComponent(customIconDataUri.split(',')[1]);
+                return raw;
+            } catch {
+            }
+        }
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+            <image href="${customIconDataUri}" x="0" y="0" width="24" height="24"/>
+        </svg>`;
+    }
+
+    if (markerStyle === 'circle') {
+        const color = layerColor ?? '#3fb1ce';
+        const symbolSvg = symbol ? symbols[symbol]?.iconSvg : undefined;
+
+        const innerIcon = symbolSvg
+            ? symbolSvg
+                  .replace('width="24"', 'width="16"')
+                  .replace('height="24"', 'height="16"')
+                  .replace('stroke="currentColor"', 'stroke="white"')
+                  .replace('stroke-width="2"', 'stroke-width="2.5" x="8" y="8"')
+            : '';
+
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+            <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2"/>
+            ${innerIcon}
+        </svg>`;
+    }
+
     let symbolSvg = symbol ? symbols[symbol]?.iconSvg : undefined;
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
     ${
@@ -228,54 +291,6 @@ export class GPXLayer {
                 layerEventManager.on('mousemove', this.fileId, this.layerOnMouseMoveBinded);
             }
 
-            let visibleTrackSegmentIds: string[] = [];
-            file.forEachSegment((segment, trackIndex, segmentIndex) => {
-                if (!segment._data.hidden) {
-                    visibleTrackSegmentIds.push(`${trackIndex}-${segmentIndex}`);
-                }
-            });
-            const segmentFilter: FilterSpecification = [
-                'in',
-                ['get', 'trackSegmentId'],
-                ['literal', visibleTrackSegmentIds],
-            ];
-
-            _map.setFilter(this.fileId, segmentFilter, { validate: false });
-
-            if (get(directionMarkers)) {
-                if (!_map.getLayer(this.fileId + '-direction')) {
-                    _map.addLayer(
-                        {
-                            id: this.fileId + '-direction',
-                            type: 'symbol',
-                            source: this.fileId,
-                            layout: {
-                                'text-field': '»',
-                                'text-offset': [0, -0.1],
-                                'text-keep-upright': false,
-                                'text-max-angle': 361,
-                                'text-allow-overlap': true,
-                                'text-font': ['Noto Sans Bold'],
-                                'symbol-placement': 'line',
-                                'symbol-spacing': 20,
-                            },
-                            paint: {
-                                'text-color': 'white',
-                                'text-halo-width': 0.2,
-                                'text-halo-color': 'white',
-                            },
-                        },
-                        ANCHOR_LAYER_KEY.directionMarkers
-                    );
-                }
-
-                _map.setFilter(this.fileId + '-direction', segmentFilter, { validate: false });
-            } else {
-                if (_map.getLayer(this.fileId + '-direction')) {
-                    _map.removeLayer(this.fileId + '-direction');
-                }
-            }
-
             let waypointSource = _map.getSource(this.fileId + '-waypoints') as
                 | GeoJSONSource
                 | undefined;
@@ -298,10 +313,9 @@ export class GPXLayer {
                         source: this.fileId + '-waypoints',
                         layout: {
                             'icon-image': ['get', 'icon'],
-                            'icon-size': 0.3,
-                            'icon-anchor': 'bottom',
-                            'icon-padding': 0,
+                            'icon-size': 1,
                             'icon-allow-overlap': true,
+                            'icon-anchor': 'bottom',
                         },
                     },
                     ANCHOR_LAYER_KEY.waypoints
@@ -333,250 +347,197 @@ export class GPXLayer {
                     this.waypointLayerOnTouchStartBinded
                 );
             }
-
-            let visibleWaypoints: number[] = [];
-            file.wpt.forEach((waypoint, waypointIndex) => {
-                if (!waypoint._data.hidden) {
-                    visibleWaypoints.push(waypointIndex);
-                }
-            });
-
-            _map.setFilter(
-                this.fileId + '-waypoints',
-                ['in', ['get', 'waypointIndex'], ['literal', visibleWaypoints]],
-                { validate: false }
-            );
         } catch (e) {
-            // No reliable way to check if the map is ready to add sources and layers
-            return;
+            console.error(e);
         }
     }
 
-    remove() {
+    destroy() {
+        removeColor(this.fileId, this.layerColor);
+        this.unsubscribe.forEach((fn) => fn());
         const _map = get(map);
-
         if (_map) {
             _map.off('style.load', this.updateBinded);
-        }
 
-        const layerEventManager = map.layerEventManager;
-        if (layerEventManager) {
-            layerEventManager.off('click', this.fileId, this.layerOnClickBinded);
-            layerEventManager.off('contextmenu', this.fileId, this.layerOnContextMenuBinded);
-            layerEventManager.off('mouseenter', this.fileId, this.layerOnMouseEnterBinded);
-            layerEventManager.off('mouseleave', this.fileId, this.layerOnMouseLeaveBinded);
-            layerEventManager.off('mousemove', this.fileId, this.layerOnMouseMoveBinded);
-
-            layerEventManager.off(
-                'mouseenter',
-                this.fileId + '-waypoints',
-                this.waypointLayerOnMouseEnterBinded
-            );
-            layerEventManager.off(
-                'mouseleave',
-                this.fileId + '-waypoints',
-                this.waypointLayerOnMouseLeaveBinded
-            );
-            layerEventManager.off(
-                'click',
-                this.fileId + '-waypoints',
-                this.waypointLayerOnClickBinded
-            );
-            layerEventManager.off(
-                'mousedown',
-                this.fileId + '-waypoints',
-                this.waypointLayerOnMouseDownBinded
-            );
-            layerEventManager.off(
-                'touchstart',
-                this.fileId + '-waypoints',
-                this.waypointLayerOnTouchStartBinded
-            );
-        }
-
-        if (_map) {
-            if (_map.getLayer(this.fileId + '-direction')) {
-                _map.removeLayer(this.fileId + '-direction');
+            const layerEventManager = map.layerEventManager;
+            if (layerEventManager) {
+                layerEventManager.off('click', this.fileId, this.layerOnClickBinded);
+                layerEventManager.off('contextmenu', this.fileId, this.layerOnContextMenuBinded);
+                layerEventManager.off('mouseenter', this.fileId, this.layerOnMouseEnterBinded);
+                layerEventManager.off('mouseleave', this.fileId, this.layerOnMouseLeaveBinded);
+                layerEventManager.off('mousemove', this.fileId, this.layerOnMouseMoveBinded);
+                layerEventManager.off(
+                    'mouseenter',
+                    this.fileId + '-waypoints',
+                    this.waypointLayerOnMouseEnterBinded
+                );
+                layerEventManager.off(
+                    'mouseleave',
+                    this.fileId + '-waypoints',
+                    this.waypointLayerOnMouseLeaveBinded
+                );
+                layerEventManager.off(
+                    'click',
+                    this.fileId + '-waypoints',
+                    this.waypointLayerOnClickBinded
+                );
+                layerEventManager.off(
+                    'mousedown',
+                    this.fileId + '-waypoints',
+                    this.waypointLayerOnMouseDownBinded
+                );
+                layerEventManager.off(
+                    'touchstart',
+                    this.fileId + '-waypoints',
+                    this.waypointLayerOnTouchStartBinded
+                );
             }
+
             if (_map.getLayer(this.fileId)) {
                 _map.removeLayer(this.fileId);
             }
-            if (_map.getSource(this.fileId)) {
-                _map.removeSource(this.fileId);
-            }
             if (_map.getLayer(this.fileId + '-waypoints')) {
                 _map.removeLayer(this.fileId + '-waypoints');
+            }
+            if (_map.getSource(this.fileId)) {
+                _map.removeSource(this.fileId);
             }
             if (_map.getSource(this.fileId + '-waypoints')) {
                 _map.removeSource(this.fileId + '-waypoints');
             }
         }
-
-        this.unsubscribe.forEach((unsubscribe) => unsubscribe());
-
-        removeColor(this.fileId, this.layerColor);
     }
 
     moveToFront() {
         const _map = get(map);
-        if (!_map) {
-            return;
-        }
-        if (_map.getLayer(this.fileId)) {
-            _map.moveLayer(this.fileId, ANCHOR_LAYER_KEY.tracks);
-        }
-        if (_map.getLayer(this.fileId + '-waypoints')) {
-            _map.moveLayer(this.fileId + '-waypoints', ANCHOR_LAYER_KEY.waypoints);
-        }
-        if (_map.getLayer(this.fileId + '-direction')) {
-            _map.moveLayer(this.fileId + '-direction', ANCHOR_LAYER_KEY.directionMarkers);
+        if (_map) {
+            if (_map.getLayer(this.fileId)) {
+                _map.moveLayer(this.fileId);
+            }
+            if (_map.getLayer(this.fileId + '-waypoints')) {
+                _map.moveLayer(this.fileId + '-waypoints');
+            }
         }
     }
 
     layerOnMouseEnter(e: any) {
-        let trackIndex = e.features[0].properties.trackIndex;
-        let segmentIndex = e.features[0].properties.segmentIndex;
-
-        if (
-            get(currentTool) === Tool.SCISSORS &&
-            get(selection).hasAnyParent(
-                new ListTrackSegmentItem(this.fileId, trackIndex, segmentIndex)
-            )
-        ) {
-            mapCursor.notify(MapCursorState.SCISSORS, true);
-        } else {
-            mapCursor.notify(MapCursorState.LAYER_HOVER, true);
-        }
+        mapCursor.notify(MapCursorState.HOVERING_FEATURE, true);
     }
 
     layerOnMouseLeave() {
-        mapCursor.notify(MapCursorState.SCISSORS, false);
-        mapCursor.notify(MapCursorState.LAYER_HOVER, false);
+        mapCursor.notify(MapCursorState.HOVERING_FEATURE, false);
     }
 
-    layerOnMouseMove(e: any) {
-        if (e.originalEvent.shiftKey) {
-            let trackIndex = e.features[0].properties.trackIndex;
-            let segmentIndex = e.features[0].properties.segmentIndex;
-
-            const file = get(this.file)?.file;
-            if (file) {
-                const closest = getClosestLinePoint(
-                    file.trk[trackIndex].trkseg[segmentIndex].trkpt,
-                    { lat: e.lngLat.lat, lon: e.lngLat.lng }
-                );
-                trackpointPopup?.setItem({ item: closest, fileId: this.fileId });
-            }
-        }
-    }
+    layerOnMouseMove(e: any) {}
 
     layerOnClick(e: MapLayerMouseEvent) {
-        if (
-            get(currentTool) === Tool.ROUTING &&
-            get(selection).hasAnyChildren(new ListRootItem(), true, ['waypoints'])
-        ) {
+        if (e.features === undefined || e.features.length === 0) {
+            return;
+        }
+        const _map = get(map);
+        if (!_map) {
             return;
         }
 
-        let trackIndex = e.features![0].properties!.trackIndex;
-        let segmentIndex = e.features![0].properties!.segmentIndex;
-
-        if (
-            get(currentTool) === Tool.SCISSORS &&
-            get(selection).hasAnyParent(
-                new ListTrackSegmentItem(this.fileId, trackIndex, segmentIndex)
-            )
-        ) {
-            if (get(map)?.queryRenderedFeatures(e.point, { layers: ['split-controls'] }).length) {
-                // Clicked on split control, ignoring
-                return;
-            }
-
-            fileActions.split(get(splitAs), this.fileId, trackIndex, segmentIndex, {
-                lat: e.lngLat.lat,
-                lon: e.lngLat.lng,
-            });
-            return;
-        }
-
+        let trackIndex = e.features[0].properties!.trackIndex;
+        let segmentIndex = e.features[0].properties!.segmentIndex;
         let file = get(this.file)?.file;
         if (!file) {
             return;
         }
 
-        let item = undefined;
-        if (get(treeFileView) && file.getSegments().length > 1) {
-            // Select inner item
-            item =
-                file.children[trackIndex].children.length > 1
-                    ? new ListTrackSegmentItem(this.fileId, trackIndex, segmentIndex)
-                    : new ListTrackItem(this.fileId, trackIndex);
+        if (get(currentTool) === Tool.SCISSORS) {
+            splitAs(e, file, this.fileId, trackIndex, segmentIndex);
         } else {
-            item = new ListFileItem(this.fileId);
-        }
-
-        if (e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
-            selection.addSelectItem(item);
-        } else {
-            selection.selectItem(item);
+            if (get(treeFileView)) {
+                if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) && this.selected) {
+                    selection.addSelectItem(
+                        new ListTrackSegmentItem(this.fileId, trackIndex, segmentIndex)
+                    );
+                } else {
+                    selection.selectItem(
+                        new ListTrackSegmentItem(this.fileId, trackIndex, segmentIndex)
+                    );
+                }
+            } else {
+                if (!this.selected) {
+                    selection.selectItem(new ListFileItem(this.fileId));
+                }
+                trackpointPopup?.setItem({
+                    item: file.trk[trackIndex].trkseg[segmentIndex],
+                    fileId: this.fileId,
+                    coordinates: e.lngLat,
+                });
+            }
         }
     }
 
-    layerOnContextMenu(e: any) {
-        if (e.originalEvent.ctrlKey) {
-            this.layerOnClick(e);
+    layerOnContextMenu(e: MapLayerMouseEvent) {
+        if (e.features === undefined || e.features.length === 0) {
+            return;
+        }
+        const _map = get(map);
+        if (!_map) {
+            return;
+        }
+
+        let trackIndex = e.features[0].properties!.trackIndex;
+        let segmentIndex = e.features[0].properties!.segmentIndex;
+        let file = get(this.file)?.file;
+        if (!file) {
+            return;
+        }
+
+        if (get(treeFileView)) {
+            selection.selectItem(
+                new ListTrackSegmentItem(this.fileId, trackIndex, segmentIndex)
+            );
+        } else {
+            if (!this.selected) {
+                selection.selectItem(new ListFileItem(this.fileId));
+            }
         }
     }
 
     waypointLayerOnMouseEnter(e: MapLayerMouseEvent) {
-        if (this.draggedWaypointIndex !== null) {
-            return;
-        }
-        let file = get(this.file)?.file;
-        if (!file) {
-            return;
-        }
-
-        let waypointIndex = e.features![0].properties!.waypointIndex;
-        let waypoint = file.wpt[waypointIndex];
-        waypointPopup?.setItem({ item: waypoint, fileId: this.fileId });
-
-        mapCursor.notify(MapCursorState.WAYPOINT_HOVER, true);
+        mapCursor.notify(MapCursorState.HOVERING_FEATURE, true);
     }
 
-    waypointLayerOnMouseLeave() {
-        mapCursor.notify(MapCursorState.WAYPOINT_HOVER, false);
+    waypointLayerOnMouseLeave(e: MapLayerMouseEvent) {
+        mapCursor.notify(MapCursorState.HOVERING_FEATURE, false);
     }
 
     waypointLayerOnClick(e: MapLayerMouseEvent) {
-        e.preventDefault();
+        if (e.features === undefined || e.features.length === 0) {
+            return;
+        }
 
-        let waypointIndex = e.features![0].properties!.waypointIndex;
+        let waypointIndex = e.features[0].properties!.waypointIndex;
         let file = get(this.file)?.file;
         if (!file) {
             return;
         }
-
         let waypoint = file.wpt[waypointIndex];
+
         if (get(currentTool) === Tool.WAYPOINT) {
-            if (this.selected) {
-                if (e.originalEvent.shiftKey) {
-                    fileActions.deleteWaypoint(this.fileId, waypointIndex);
+            if (get(treeFileView)) {
+                if (
+                    (e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
+                    this.selected
+                ) {
+                    selection.addSelectItem(new ListWaypointItem(this.fileId, waypointIndex));
                 } else {
                     selection.selectItem(new ListWaypointItem(this.fileId, waypointIndex));
-                    selectedWaypoint.set([waypoint, this.fileId]);
                 }
             } else {
-                if (get(treeFileView)) {
-                    selection.selectItem(new ListWaypointItem(this.fileId, waypointIndex));
-                } else {
-                    selection.selectItem(new ListFileItem(this.fileId));
-                }
                 selectedWaypoint.set([waypoint, this.fileId]);
             }
         } else {
             if (get(treeFileView)) {
-                if ((e.originalEvent.ctrlKey || e.originalEvent.metaKey) && this.selected) {
+                if (
+                    (e.originalEvent.ctrlKey || e.originalEvent.metaKey) &&
+                    this.selected
+                ) {
                     selection.addSelectItem(new ListWaypointItem(this.fileId, waypointIndex));
                 } else {
                     selection.selectItem(new ListWaypointItem(this.fileId, waypointIndex));
@@ -762,6 +723,10 @@ export class GPXLayer {
         }
 
         file.wpt.forEach((waypoint, index) => {
+            const markerStyle = getMarkerStyle(waypoint.type);
+            const customIcon = getCustomIconFromLinks(waypoint.link);
+            const iconId = `waypoint-${getSymbolKey(waypoint.sym) ?? 'default'}-${this.layerColor}-${markerStyle}${markerStyle === 'custom' && customIcon ? '-' + btoa(customIcon).slice(0, 8) : ''}`;
+
             data.features.push({
                 type: 'Feature',
                 geometry: {
@@ -771,7 +736,7 @@ export class GPXLayer {
                 properties: {
                     fileId: this.fileId,
                     waypointIndex: index,
-                    icon: `waypoint-${getSymbolKey(waypoint.sym) ?? 'default'}-${this.layerColor}`,
+                    icon: iconId,
                 },
             });
         });
@@ -786,14 +751,17 @@ export class GPXLayer {
             return;
         }
 
-        let symbols = new Set<string | undefined>();
         file.wpt.forEach((waypoint) => {
-            symbols.add(getSymbolKey(waypoint.sym));
-        });
+            const symbolKey = getSymbolKey(waypoint.sym);
+            const markerStyle = getMarkerStyle(waypoint.type);
+            const customIcon = getCustomIconFromLinks(waypoint.link);
+            const iconId = `waypoint-${symbolKey ?? 'default'}-${this.layerColor}-${markerStyle}${markerStyle === 'custom' && customIcon ? '-' + btoa(customIcon).slice(0, 8) : ''}`;
 
-        symbols.forEach((symbol) => {
-            const iconId = `waypoint-${symbol ?? 'default'}-${this.layerColor}`;
-            loadSVGIcon(_map, iconId, getSvgForSymbol(symbol, this.layerColor));
+            loadSVGIcon(
+                _map,
+                iconId,
+                getSvgForSymbol(symbolKey, this.layerColor, markerStyle, customIcon ?? undefined)
+            );
         });
     }
 }

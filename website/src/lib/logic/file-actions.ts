@@ -687,6 +687,7 @@ export const fileActions = {
                     wpt.cmt = waypoint.cmt;
                     wpt.sym = waypoint.sym;
                     wpt.link = waypoint.link;
+                    wpt.type = waypoint.type;
                     wpt.setCoordinates(waypoint.attributes);
                     wpt.ele = elevation[0];
                 });
