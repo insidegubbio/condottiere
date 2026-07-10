@@ -36,15 +36,36 @@ const MARKER_TYPE_PREFIX = 'condottiero:';
 
 export const CUSTOM_ICON_LINK_TYPE = 'condottiero:customIcon';
 
+export const DEFAULT_MARKER_COLOR = '#3fb1ce';
+
+// wpt.type is encoded as:
+//   undefined                          -> pin, default color
+//   "condottiero:pin:ff0000"           -> pin, custom color
+//   "condottiero:circle"               -> circle, default (track) color
+//   "condottiero:circle:ff0000"        -> circle, custom color
+//   "condottiero:custom"               -> custom uploaded icon
+
+function parseMarkerType(wptType: string | undefined): { style: string; color?: string } | undefined {
+    if (!wptType || !wptType.startsWith(MARKER_TYPE_PREFIX)) return undefined;
+    const [style, color] = wptType.slice(MARKER_TYPE_PREFIX.length).split(':');
+    return { style, color: color && /^[0-9a-fA-F]{6}$/.test(color) ? `#${color}` : undefined };
+}
+
 export function getMarkerStyle(wptType: string | undefined): MarkerStyle {
-    if (wptType === `${MARKER_TYPE_PREFIX}circle`) return 'circle';
-    if (wptType === `${MARKER_TYPE_PREFIX}custom`) return 'custom';
+    const parsed = parseMarkerType(wptType);
+    if (parsed?.style === 'circle') return 'circle';
+    if (parsed?.style === 'custom') return 'custom';
     return 'pin';
 }
 
-export function encodeMarkerStyle(style: MarkerStyle): string | undefined {
-    if (style === 'pin') return undefined;
-    return `${MARKER_TYPE_PREFIX}${style}`;
+export function getMarkerColor(wptType: string | undefined): string | undefined {
+    return parseMarkerType(wptType)?.color;
+}
+
+export function encodeMarkerStyle(style: MarkerStyle, color?: string): string | undefined {
+    const normalizedColor = color?.replace('#', '').toLowerCase();
+    if (style === 'pin' && !normalizedColor) return undefined;
+    return `${MARKER_TYPE_PREFIX}${style}${normalizedColor ? ':' + normalizedColor : ''}`;
 }
 
 export function getCustomIconFromLinks(
@@ -110,7 +131,8 @@ export function getSvgForSymbol(
     symbol?: string | undefined,
     layerColor?: string | undefined,
     markerStyle: MarkerStyle = 'pin',
-    customIconDataUri?: string | undefined
+    customIconDataUri?: string | undefined,
+    markerColor?: string | undefined
 ): string {
     if (markerStyle === 'custom' && customIconDataUri) {
         if (customIconDataUri.startsWith('data:image/svg+xml')) {
@@ -128,7 +150,7 @@ export function getSvgForSymbol(
     }
 
     if (markerStyle === 'circle') {
-        const color = layerColor ?? '#3fb1ce';
+        const color = markerColor ?? layerColor ?? DEFAULT_MARKER_COLOR;
         const symbolSvg = symbol ? symbols[symbol]?.iconSvg : undefined;
 
         const innerIcon = symbolSvg
@@ -145,6 +167,7 @@ export function getSvgForSymbol(
         </svg>`;
     }
 
+    const pinColor = markerColor ?? DEFAULT_MARKER_COLOR;
     let symbolSvg = symbol ? symbols[symbol]?.iconSvg : undefined;
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
     ${
@@ -159,7 +182,7 @@ export function getSvgForSymbol(
     ${MapPin.replace('width="24"', '')
         .replace('height="24"', '')
         .replace('stroke="currentColor"', '')
-        .replace('path', `path fill="#3fb1ce" stroke="SteelBlue" stroke-width="1"`)
+        .replace('path', `path fill="${pinColor}" stroke="SteelBlue" stroke-width="1"`)
         .replace(
             'circle',
             `circle fill="${symbolSvg ? 'none' : 'white'}" stroke="${symbolSvg ? 'none' : 'white'}" stroke-width="2"`
@@ -291,6 +314,54 @@ export class GPXLayer {
                 layerEventManager.on('mousemove', this.fileId, this.layerOnMouseMoveBinded);
             }
 
+            let visibleTrackSegmentIds: string[] = [];
+            file.forEachSegment((segment, trackIndex, segmentIndex) => {
+                if (!segment._data.hidden) {
+                    visibleTrackSegmentIds.push(`${trackIndex}-${segmentIndex}`);
+                }
+            });
+            const segmentFilter: FilterSpecification = [
+                'in',
+                ['get', 'trackSegmentId'],
+                ['literal', visibleTrackSegmentIds],
+            ];
+
+            _map.setFilter(this.fileId, segmentFilter, { validate: false });
+
+            if (get(directionMarkers)) {
+                if (!_map.getLayer(this.fileId + '-direction')) {
+                    _map.addLayer(
+                        {
+                            id: this.fileId + '-direction',
+                            type: 'symbol',
+                            source: this.fileId,
+                            layout: {
+                                'text-field': '»',
+                                'text-offset': [0, -0.1],
+                                'text-keep-upright': false,
+                                'text-max-angle': 361,
+                                'text-allow-overlap': true,
+                                'text-font': ['Noto Sans Bold'],
+                                'symbol-placement': 'line',
+                                'symbol-spacing': 20,
+                            },
+                            paint: {
+                                'text-color': 'white',
+                                'text-halo-width': 0.2,
+                                'text-halo-color': 'white',
+                            },
+                        },
+                        ANCHOR_LAYER_KEY.directionMarkers
+                    );
+                }
+
+                _map.setFilter(this.fileId + '-direction', segmentFilter, { validate: false });
+            } else {
+                if (_map.getLayer(this.fileId + '-direction')) {
+                    _map.removeLayer(this.fileId + '-direction');
+                }
+            }
+
             let waypointSource = _map.getSource(this.fileId + '-waypoints') as
                 | GeoJSONSource
                 | undefined;
@@ -313,9 +384,10 @@ export class GPXLayer {
                         source: this.fileId + '-waypoints',
                         layout: {
                             'icon-image': ['get', 'icon'],
-                            'icon-size': 1,
+                            'icon-size': 0.3,
                             'icon-allow-overlap': true,
                             'icon-anchor': 'bottom',
+                            'icon-padding': 0,
                         },
                     },
                     ANCHOR_LAYER_KEY.waypoints
@@ -347,12 +419,25 @@ export class GPXLayer {
                     this.waypointLayerOnTouchStartBinded
                 );
             }
+
+            let visibleWaypoints: number[] = [];
+            file.wpt.forEach((waypoint, waypointIndex) => {
+                if (!waypoint._data.hidden) {
+                    visibleWaypoints.push(waypointIndex);
+                }
+            });
+
+            _map.setFilter(
+                this.fileId + '-waypoints',
+                ['in', ['get', 'waypointIndex'], ['literal', visibleWaypoints]],
+                { validate: false }
+            );
         } catch (e) {
             console.error(e);
         }
     }
 
-    destroy() {
+    remove() {
         removeColor(this.fileId, this.layerColor);
         this.unsubscribe.forEach((fn) => fn());
         const _map = get(map);
@@ -393,6 +478,9 @@ export class GPXLayer {
                 );
             }
 
+            if (_map.getLayer(this.fileId + '-direction')) {
+                _map.removeLayer(this.fileId + '-direction');
+            }
             if (_map.getLayer(this.fileId)) {
                 _map.removeLayer(this.fileId);
             }
@@ -724,8 +812,9 @@ export class GPXLayer {
 
         file.wpt.forEach((waypoint, index) => {
             const markerStyle = getMarkerStyle(waypoint.type);
+            const markerColor = getMarkerColor(waypoint.type);
             const customIcon = getCustomIconFromLinks(waypoint.link);
-            const iconId = `waypoint-${getSymbolKey(waypoint.sym) ?? 'default'}-${this.layerColor}-${markerStyle}${markerStyle === 'custom' && customIcon ? '-' + btoa(customIcon).slice(0, 8) : ''}`;
+            const iconId = this.getIconId(waypoint, markerStyle, markerColor, customIcon);
 
             data.features.push({
                 type: 'Feature',
@@ -744,6 +833,19 @@ export class GPXLayer {
         return data;
     }
 
+    getIconId(
+        waypoint: { sym?: string },
+        markerStyle: MarkerStyle,
+        markerColor: string | undefined,
+        customIcon: string | undefined
+    ): string {
+        const symbolKey = getSymbolKey(waypoint.sym);
+        const colorPart = markerColor ? `-${markerColor.replace('#', '')}` : `-${this.layerColor}`;
+        const customPart =
+            markerStyle === 'custom' && customIcon ? '-' + btoa(customIcon).slice(0, 8) : '';
+        return `waypoint-${symbolKey ?? 'default'}${colorPart}-${markerStyle}${customPart}`;
+    }
+
     loadIcons() {
         const _map = get(map);
         let file = get(this.file)?.file;
@@ -754,13 +856,20 @@ export class GPXLayer {
         file.wpt.forEach((waypoint) => {
             const symbolKey = getSymbolKey(waypoint.sym);
             const markerStyle = getMarkerStyle(waypoint.type);
+            const markerColor = getMarkerColor(waypoint.type);
             const customIcon = getCustomIconFromLinks(waypoint.link);
-            const iconId = `waypoint-${symbolKey ?? 'default'}-${this.layerColor}-${markerStyle}${markerStyle === 'custom' && customIcon ? '-' + btoa(customIcon).slice(0, 8) : ''}`;
+            const iconId = this.getIconId(waypoint, markerStyle, markerColor, customIcon);
 
             loadSVGIcon(
                 _map,
                 iconId,
-                getSvgForSymbol(symbolKey, this.layerColor, markerStyle, customIcon ?? undefined)
+                getSvgForSymbol(
+                    symbolKey,
+                    this.layerColor,
+                    markerStyle,
+                    customIcon ?? undefined,
+                    markerColor
+                )
             );
         });
     }
