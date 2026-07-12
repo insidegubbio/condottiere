@@ -52,7 +52,7 @@
         }
         $distanceMarkers = options.distanceMarkers;
         $directionMarkers = options.directionMarkers;
-        $distanceUnitfs = options.distanceUnits;
+        $distanceUnits = options.distanceUnits;
         $velocityUnits = options.velocityUnits;
         $temperatureUnits = options.temperatureUnits;
         if (options.theme != 'system') {
