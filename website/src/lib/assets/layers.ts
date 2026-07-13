@@ -391,6 +391,7 @@ export const basemaps: { [key: string]: string | StyleSpecification } = {
             },
         ],
     },
+    cartografo: 'https://cartografo.insidegubbio.com/style.json',
 };
 
 export const overlays: { [key: string]: string | StyleSpecification } = {
@@ -852,6 +853,9 @@ export const basemapTree: LayerTreeType = {
                 ignFrScan25: true,
                 ignFrSatellite: true,
             },
+            italy: {
+                cartografo: true,
+            },
             new_zealand: {
                 linz: true,
                 linzTopo: true,
@@ -1078,6 +1082,9 @@ export const defaultBasemapTree: LayerTreeType = {
                 ignFrTopo: false,
                 ignFrScan25: false,
                 ignFrSatellite: false,
+            },
+            italy: {
+                cartografo: false,
             },
             new_zealand: {
                 linz: false,
