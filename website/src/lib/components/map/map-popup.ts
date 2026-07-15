@@ -31,18 +31,24 @@ export class MapPopup {
         });
     }
 
+    requestId: number = 0;
+
     setItem(item: PopupItem | null) {
         if (item) item.hide = () => this.hide();
+        this.popup.remove();
         this.item.set(item);
         if (item === null) {
             this.hide();
         } else {
-            this.popup.remove();
-            tick().then(() => this.show());
+            const requestId = ++this.requestId;
+            tick().then(() => this.show(requestId));
         }
     }
 
-    show() {
+    show(requestId?: number) {
+        if (requestId !== undefined && requestId !== this.requestId) {
+            return;
+        }
         const item = get(this.item);
         if (item === null) {
             this.hide();

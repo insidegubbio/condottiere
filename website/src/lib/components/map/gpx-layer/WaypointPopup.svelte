@@ -41,11 +41,11 @@
     }
 </script>
 
-<Card.Root class="border-none shadow-md p-2 max-w-[50dvw] gap-0 waypoint-popup-card">
+<Card.Root class="border-none shadow-md p-2 max-w-[50dvw] gap-0 waypoint-popup-card pointer-events-none">
     <Card.Header class="p-0 gap-0">
         <Card.Title class="text-md waypoint-popup-title">
             {#if waypoint.item.link && waypoint.item.link.attributes && waypoint.item.link.attributes.href}
-                <a href={waypoint.item.link.attributes.href} target="_blank">
+                <a href={waypoint.item.link.attributes.href} target="_blank" class="pointer-events-auto">
                     {waypoint.item.name ?? waypoint.item.link.attributes.href}
                     <ExternalLink size="12" class="inline-block mb-1.5" />
                 </a>
@@ -76,7 +76,7 @@
                 <WithUnits value={waypoint.item.ele} type="elevation" />
             {/if}
         </div>
-        <ScrollArea class="flex flex-col max-h-[30dvh]">
+        <ScrollArea class="flex flex-col max-h-[30dvh] pointer-events-auto">
             {#if waypoint.item.desc}
                 <span class="whitespace-pre-wrap waypoint-popup-body">{@html sanitize(waypoint.item.desc)}</span>
             {/if}
@@ -84,7 +84,7 @@
                 <span class="whitespace-pre-wrap waypoint-popup-body">{@html sanitize(waypoint.item.cmt)}</span>
             {/if}
         </ScrollArea>
-        <div class="mt-2 flex flex-col gap-1">
+        <div class="mt-2 flex flex-col gap-1 pointer-events-auto">
             {#if waypoint.item.link && waypoint.item.link.attributes && waypoint.item.link.attributes.href}
                 <Button
                     class="justify-start"
@@ -125,18 +125,34 @@
         color: #2C3229 !important;
     }
 
+    :global(.dark .waypoint-popup-card) {
+        color: #DFE5D7 !important;
+    }
+
     :global(.waypoint-popup-title) {
         font-family: 'Satoshi', sans-serif !important;
         color: #2C3229 !important;
+    }
+
+    :global(.dark .waypoint-popup-title) {
+        color: #DFE5D7 !important;
     }
 
     :global(.waypoint-popup-meta) {
         color: color-mix(in srgb, #2C3229 60%, transparent) !important;
     }
 
+    :global(.dark .waypoint-popup-meta) {
+        color: color-mix(in srgb, #DFE5D7 60%, transparent) !important;
+    }
+
     :global(.waypoint-popup-body) {
         font-family: 'Satoshi', sans-serif !important;
         color: #2C3229 !important;
+    }
+
+    :global(.dark .waypoint-popup-body) {
+        color: #DFE5D7 !important;
     }
 
     div :global(a) {
