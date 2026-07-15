@@ -58,7 +58,9 @@
             <div class="flex flex-col">
                 <p>{name}</p>
                 <div class="text-muted-foreground text-xs font-normal">
-                    {poi.item.lat.toFixed(6)}&deg; {poi.item.lon.toFixed(6)}&deg;
+                    {#if poi?.item?.lat != null && poi?.item?.lon != null}
+                        {poi.item.lat.toFixed(6)}&deg; {poi.item.lon.toFixed(6)}&deg;
+                    {/if}
                 </div>
             </div>
 
