@@ -121,26 +121,28 @@
             </div>
         {/if}
     </div>
-    <div
-        class="{options.elevation.show ? '' : 'h-10'} flex flex-row gap-2 p-2 sm:px-4"
-        style={options.elevation.show ? `height: ${options.elevation.height}px` : ''}
-    >
-        {#if options.showStats}
-            <GPXStatistics
-                {gpxStatistics}
-                {slicedGPXStatistics}
-                orientation={options.elevation.show ? 'vertical' : 'horizontal'}
-            />
-        {/if}
-        {#if options.elevation.show}
-            <ElevationProfile
-                {gpxStatistics}
-                {slicedGPXStatistics}
-                {hoveredPoint}
-                {additionalDatasets}
-                {elevationFill}
-                showControls={options.elevation.controls}
-            />
-        {/if}
-    </div>
+    {#if options.showStats || options.elevation.show}
+        <div
+            class="{options.elevation.show ? '' : 'h-10'} flex flex-row gap-2 p-2 sm:px-4"
+            style={options.elevation.show ? `height: ${options.elevation.height}px` : ''}
+        >
+            {#if options.showStats}
+                <GPXStatistics
+                    {gpxStatistics}
+                    {slicedGPXStatistics}
+                    orientation={options.elevation.show ? 'vertical' : 'horizontal'}
+                />
+            {/if}
+            {#if options.elevation.show}
+                <ElevationProfile
+                    {gpxStatistics}
+                    {slicedGPXStatistics}
+                    {hoveredPoint}
+                    {additionalDatasets}
+                    {elevationFill}
+                    showControls={options.elevation.controls}
+                />
+            {/if}
+        </div>
+    {/if}
 </div>
