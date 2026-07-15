@@ -142,10 +142,22 @@ export class OverpassLayer {
     }
 
     onHover(e: any) {
+        const properties = e.features[0].properties;
+
+        // Guard against POIs cached in IndexedDB before missing
+        // coordinates/tags were filtered out at query time.
+        if (
+            properties.lat === undefined ||
+            properties.lon === undefined ||
+            properties.tags === undefined
+        ) {
+            return;
+        }
+
         this.popup.setItem({
             item: {
-                ...e.features[0].properties,
-                sym: overpassQueryData[e.features[0].properties.query].symbol ?? '',
+                ...properties,
+                sym: overpassQueryData[properties.query].symbol ?? '',
             },
         });
     }
@@ -219,6 +231,18 @@ export class OverpassLayer {
         }
 
         for (let element of data.elements) {
+            const lat = element.center ? element.center.lat : element.lat;
+            const lon = element.center ? element.center.lon : element.lon;
+
+            // Overpass can return elements without usable coordinates (e.g. a
+            // relation for which it couldn't compute a center) or without tags
+            // (e.g. a way/relation whose members matched but which itself has
+            // no tags). Skip these rather than storing broken POIs that crash
+            // the popup later on click.
+            if (lat === undefined || lon === undefined || element.tags === undefined) {
+                continue;
+            }
+
             for (let query of queries) {
                 if (belongsToQuery(element, query)) {
                     pois.push({
@@ -228,14 +252,12 @@ export class OverpassLayer {
                             type: 'Feature',
                             geometry: {
                                 type: 'Point',
-                                coordinates: element.center
-                                    ? [element.center.lon, element.center.lat]
-                                    : [element.lon, element.lat],
+                                coordinates: [lon, lat],
                             },
                             properties: {
                                 id: element.id,
-                                lat: element.center ? element.center.lat : element.lat,
-                                lon: element.center ? element.center.lon : element.lon,
+                                lat: lat,
+                                lon: lon,
                                 query: query,
                                 icon: `overpass-${query}`,
                                 tags: element.tags,
