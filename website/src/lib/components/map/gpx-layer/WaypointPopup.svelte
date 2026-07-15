@@ -41,11 +41,11 @@
     }
 </script>
 
-<Card.Root class="border-none shadow-md p-2 max-w-[50dvw] gap-0 waypoint-popup-card">
+<Card.Root class="border-none shadow-md p-2 max-w-[50dvw] gap-0 waypoint-popup-card pointer-events-none">
     <Card.Header class="p-0 gap-0">
         <Card.Title class="text-md waypoint-popup-title">
             {#if waypoint.item.link && waypoint.item.link.attributes && waypoint.item.link.attributes.href}
-                <a href={waypoint.item.link.attributes.href} target="_blank">
+                <a href={waypoint.item.link.attributes.href} target="_blank" class="pointer-events-auto">
                     {waypoint.item.name ?? waypoint.item.link.attributes.href}
                     <ExternalLink size="12" class="inline-block mb-1.5" />
                 </a>
@@ -76,7 +76,7 @@
                 <WithUnits value={waypoint.item.ele} type="elevation" />
             {/if}
         </div>
-        <ScrollArea class="flex flex-col max-h-[30dvh]">
+        <ScrollArea class="flex flex-col max-h-[30dvh] pointer-events-auto">
             {#if waypoint.item.desc}
                 <span class="whitespace-pre-wrap waypoint-popup-body">{@html sanitize(waypoint.item.desc)}</span>
             {/if}
@@ -84,7 +84,7 @@
                 <span class="whitespace-pre-wrap waypoint-popup-body">{@html sanitize(waypoint.item.cmt)}</span>
             {/if}
         </ScrollArea>
-        <div class="mt-2 flex flex-col gap-1">
+        <div class="mt-2 flex flex-col gap-1 pointer-events-auto">
             {#if waypoint.item.link && waypoint.item.link.attributes && waypoint.item.link.attributes.href}
                 <Button
                     class="justify-start"
